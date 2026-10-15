@@ -1,0 +1,9 @@
+VK_TOKEN = "PUT_YOUR_TOKEN_HERE"
+
+GROUP_ID = 0
+
+DB_PATH = "tickets.db"
+
+ADMIN_IDS = [
+    # 123456789,
+]
