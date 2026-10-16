@@ -45,3 +45,23 @@ def add_event(title, date, price, seats):
     )
     conn.commit()
     conn.close()
+
+
+def get_event(event_id):
+    conn = _connect()
+    row = conn.execute(
+        "SELECT id, title, date, price, seats_left FROM events WHERE id=?",
+        (event_id,),
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def decrement_seats(event_id):
+    conn = _connect()
+    conn.execute(
+        "UPDATE events SET seats_left = seats_left - 1 WHERE id=? AND seats_left > 0",
+        (event_id,),
+    )
+    conn.commit()
+    conn.close()

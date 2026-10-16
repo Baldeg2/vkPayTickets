@@ -1,14 +1,14 @@
 import json
+
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
 
 from config import VK_TOKEN, GROUP_ID
-
+from database import init_db, get_events
 
 vk_session = vk_api.VkApi(token=VK_TOKEN)
 vk = vk_session.get_api()
 longpoll = VkLongPoll(vk_session)
-
 
 KEYBOARD_START = {
     "one_time": False,
@@ -30,6 +30,17 @@ def send(user_id, text, keyboard=None):
     )
 
 
+def events_keyboard(events):
+    buttons = [
+        [{
+            "action": {"type": "text", "label": f"#{eid} {title[:30]}"},
+            "color": "primary",
+        }]
+        for eid, title, date, price, seats in events
+    ]
+    return {"one_time": False, "buttons": buttons}
+
+
 def handle_message(event):
     text = event.text.strip()
     uid = event.user_id
@@ -37,8 +48,20 @@ def handle_message(event):
     if text.lower() in ("начать", "/start", "start"):
         send(uid, "Привет! Это бот мероприятий ВШЭ.", KEYBOARD_START)
 
+    elif text == "🎟 Мероприятия":
+        events = get_events()
+        if not events:
+            send(uid, "Пока нет мероприятий.")
+        else:
+            listing = "\n".join(
+                f"#{e} {t} | {d} | {p}₽ | мест: {s}"
+                for e, t, d, p, s in events
+            )
+            send(uid, "Выбери мероприятие:\n" + listing, events_keyboard(events))
+
 
 def main():
+    init_db()
     print(f"Bot started. Group ID: {GROUP_ID}")
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:
