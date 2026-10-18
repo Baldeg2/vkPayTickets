@@ -3,9 +3,10 @@ import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
 
 from config import VK_TOKEN, GROUP_ID
-from database import (init_db, get_events, get_event,
-                      create_ticket, decrement_seats)
+from database import (init_db, get_events, get_event, create_ticket,
+                      decrement_seats, get_user_tickets)
 from payment import process_payment
+from utils import generate_ticket_code
 
 
 vk_session = vk_api.VkApi(token=VK_TOKEN)
@@ -78,11 +79,21 @@ def handle_message(event):
             return
 
         tx = process_payment(uid, eid, price)
-        code = f"TMP-{uid}-{eid}"
+        code = generate_ticket_code()
         create_ticket(eid, uid, code)
         decrement_seats(eid)
         print(f"Ticket {code} sold to {uid} (tx={tx})")
-        send(uid, f"✅ Билет на «{title}» куплен!\nКод: {code}")
+        send(uid, f"✅ Билет на «{title}» куплен!\n📅 {date}\n🎫 Код: {code}")
+
+    elif text == "📋 Мои билеты":
+        tickets = get_user_tickets(uid)
+        if not tickets:
+            send(uid, "У тебя пока нет билетов.")
+        else:
+            body = "\n\n".join(
+                f"🎫 {t}\n📅 {d}\nКод: {c}" for c, t, d in tickets
+            )
+            send(uid, body)
 
 
 def main():
