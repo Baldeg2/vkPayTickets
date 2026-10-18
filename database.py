@@ -65,6 +65,7 @@ def decrement_seats(event_id):
     )
     conn.commit()
     conn.close()
+    
 def create_ticket(event_id, user_id, code):
     conn = _connect()
     conn.execute(
@@ -73,3 +74,16 @@ def create_ticket(event_id, user_id, code):
     )
     conn.commit()
     conn.close()
+def get_user_tickets(user_id):
+    conn = _connect()
+    rows = conn.execute(
+        """
+        SELECT t.code, e.title, e.date
+        FROM tickets t
+        JOIN events e ON t.event_id = e.id
+        WHERE t.user_id = ?
+        """,
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return rows
