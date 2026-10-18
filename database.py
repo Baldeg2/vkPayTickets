@@ -65,3 +65,11 @@ def decrement_seats(event_id):
     )
     conn.commit()
     conn.close()
+def create_ticket(event_id, user_id, code):
+    conn = _connect()
+    conn.execute(
+        "INSERT INTO tickets (event_id, user_id, code, paid) VALUES (?,?,?,1)",
+        (event_id, user_id, code),
+    )
+    conn.commit()
+    conn.close()
