@@ -1,14 +1,17 @@
 import json
-
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
 
 from config import VK_TOKEN, GROUP_ID
-from database import init_db, get_events
+from database import (init_db, get_events, get_event,
+                      create_ticket, decrement_seats)
+from payment import process_payment
+
 
 vk_session = vk_api.VkApi(token=VK_TOKEN)
 vk = vk_session.get_api()
 longpoll = VkLongPoll(vk_session)
+
 
 KEYBOARD_START = {
     "one_time": False,
@@ -58,6 +61,28 @@ def handle_message(event):
                 for e, t, d, p, s in events
             )
             send(uid, "Выбери мероприятие:\n" + listing, events_keyboard(events))
+
+    elif text.startswith("#"):
+        try:
+            eid = int(text.split()[0][1:])
+        except (ValueError, IndexError):
+            send(uid, "Не понял номер мероприятия.")
+            return
+        ev = get_event(eid)
+        if not ev:
+            send(uid, "Мероприятие не найдено.")
+            return
+        _, title, date, price, seats = ev
+        if seats <= 0:
+            send(uid, "Мест больше нет 😢")
+            return
+
+        tx = process_payment(uid, eid, price)
+        code = f"TMP-{uid}-{eid}"
+        create_ticket(eid, uid, code)
+        decrement_seats(eid)
+        print(f"Ticket {code} sold to {uid} (tx={tx})")
+        send(uid, f"✅ Билет на «{title}» куплен!\nКод: {code}")
 
 
 def main():
