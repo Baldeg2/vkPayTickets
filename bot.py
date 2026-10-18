@@ -25,6 +25,13 @@ KEYBOARD_START = {
     ],
 }
 
+KEYBOARD_BACK = {
+    "one_time": False,
+    "buttons": [
+        [{"action": {"type": "text", "label": "🏠 В меню"}, "color": "secondary"}]
+    ],
+}
+
 
 def send(user_id, text, keyboard=None):
     try:
@@ -46,6 +53,7 @@ def events_keyboard(events):
         }]
         for eid, title, date, price, seats in events
     ]
+    buttons.append([{"action": {"type": "text", "label": "🏠 В меню"}, "color": "secondary"}])
     return {"one_time": False, "buttons": buttons}
 
 
@@ -53,13 +61,13 @@ def handle_message(event):
     text = event.text.strip()
     uid = event.user_id
 
-    if text.lower() in ("начать", "/start", "start"):
-        send(uid, "Привет! Это бот мероприятий ВШЭ.", KEYBOARD_START)
+    if text.lower() in ("начать", "/start", "start", "🏠 в меню"):
+        send(uid, "Привет! Это бот мероприятий ВШЭ.\nВыбери действие:", KEYBOARD_START)
 
     elif text == "🎟 Мероприятия":
         events = get_events()
         if not events:
-            send(uid, "Пока нет мероприятий.")
+            send(uid, "Пока нет мероприятий.", KEYBOARD_BACK)
         else:
             listing = "\n".join(
                 f"#{e} {t} | {d} | {p}₽ | мест: {s}"
@@ -75,11 +83,11 @@ def handle_message(event):
             return
         ev = get_event(eid)
         if not ev:
-            send(uid, "Мероприятие не найдено.")
+            send(uid, "Мероприятие не найдено.", KEYBOARD_BACK)
             return
         _, title, date, price, seats = ev
         if seats <= 0:
-            send(uid, "Мест больше нет 😢")
+            send(uid, "Мест больше нет 😢", KEYBOARD_BACK)
             return
 
         tx = process_payment(uid, eid, price)
@@ -87,35 +95,50 @@ def handle_message(event):
         create_ticket(eid, uid, code)
         decrement_seats(eid)
         log.info(f"Ticket {code} sold to {uid} (tx={tx})")
-        send(uid, f"✅ Билет на «{title}» куплен!\n📅 {date}\n🎫 Код: {code}")
+        send(
+            uid,
+            f"✅ Билет на «{title}» куплен!\n"
+            f"📅 {date}\n"
+            f"🎫 Код: {code}\n\n"
+            f"Покажи этот код на входе.",
+            KEYBOARD_BACK,
+        )
 
     elif text == "📋 Мои билеты":
         tickets = get_user_tickets(uid)
         if not tickets:
-            send(uid, "У тебя пока нет билетов.")
+            send(uid, "У тебя пока нет билетов.", KEYBOARD_BACK)
         else:
             body = "\n\n".join(
                 f"🎫 {t}\n📅 {d}\nКод: {c}" for c, t, d in tickets
             )
-            send(uid, body)
+            send(uid, body, KEYBOARD_BACK)
 
     elif text.startswith("/add_event"):
         if not is_admin(uid, ADMIN_IDS):
-            send(uid, "⛔ Команда только для админов.")
+            send(uid, "⛔ Команда только для админов.", KEYBOARD_BACK)
             return
         try:
             _, payload = text.split(" ", 1)
             title, date, price, seats = [x.strip() for x in payload.split("|")]
             add_event(title, date, int(price), int(seats))
-            send(uid, f"✅ Мероприятие '{title}' добавлено.")
+            send(uid, f"✅ Мероприятие '{title}' добавлено.", KEYBOARD_BACK)
             log.info(f"Event added by {uid}: {title}")
         except Exception as e:
-            send(uid, "Ошибка формата. Пример:\n"
-                      "/add_event ДОД | 2025-12-01 | 0 | 50")
+            send(
+                uid,
+                "Ошибка формата.\n"
+                "Используй: /add_event Название | Дата | Цена | Мест\n"
+                "Пример: /add_event ДОД | 2025-12-01 | 0 | 50",
+                KEYBOARD_BACK,
+            )
             log.error(f"add_event error: {e}")
 
     elif text == "/myid":
-        send(uid, f"Твой ID: {uid}")
+        send(uid, f"Твой ID: {uid}", KEYBOARD_BACK)
+
+    else:
+        send(uid, "Не понял команду. Используй меню ниже.", KEYBOARD_START)
 
 
 def main():
@@ -123,7 +146,10 @@ def main():
     log.info(f"Bot started. Group ID: {GROUP_ID}")
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-            handle_message(event)
+            try:
+                handle_message(event)
+            except Exception as e:
+                log.exception(f"Handler error: {e}")
 
 
 if __name__ == "__main__":
