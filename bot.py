@@ -1,12 +1,13 @@
+
 import json
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
 
-from config import VK_TOKEN, GROUP_ID
+from config import VK_TOKEN, GROUP_ID, ADMIN_IDS
 from database import (init_db, get_events, get_event, create_ticket,
-                      decrement_seats, get_user_tickets)
+                      decrement_seats, get_user_tickets, add_event)
 from payment import process_payment
-from utils import generate_ticket_code
+from utils import generate_ticket_code, log, is_admin
 
 
 vk_session = vk_api.VkApi(token=VK_TOKEN)
@@ -26,12 +27,15 @@ KEYBOARD_START = {
 
 
 def send(user_id, text, keyboard=None):
-    vk.messages.send(
-        user_id=user_id,
-        message=text,
-        random_id=0,
-        keyboard=json.dumps(keyboard, ensure_ascii=False) if keyboard else None,
-    )
+    try:
+        vk.messages.send(
+            user_id=user_id,
+            message=text,
+            random_id=0,
+            keyboard=json.dumps(keyboard, ensure_ascii=False) if keyboard else None,
+        )
+    except Exception as e:
+        log.error(f"send failed to {user_id}: {e}")
 
 
 def events_keyboard(events):
@@ -82,7 +86,7 @@ def handle_message(event):
         code = generate_ticket_code()
         create_ticket(eid, uid, code)
         decrement_seats(eid)
-        print(f"Ticket {code} sold to {uid} (tx={tx})")
+        log.info(f"Ticket {code} sold to {uid} (tx={tx})")
         send(uid, f"✅ Билет на «{title}» куплен!\n📅 {date}\n🎫 Код: {code}")
 
     elif text == "📋 Мои билеты":
@@ -95,10 +99,28 @@ def handle_message(event):
             )
             send(uid, body)
 
+    elif text.startswith("/add_event"):
+        if not is_admin(uid, ADMIN_IDS):
+            send(uid, "⛔ Команда только для админов.")
+            return
+        try:
+            _, payload = text.split(" ", 1)
+            title, date, price, seats = [x.strip() for x in payload.split("|")]
+            add_event(title, date, int(price), int(seats))
+            send(uid, f"✅ Мероприятие '{title}' добавлено.")
+            log.info(f"Event added by {uid}: {title}")
+        except Exception as e:
+            send(uid, "Ошибка формата. Пример:\n"
+                      "/add_event ДОД | 2025-12-01 | 0 | 50")
+            log.error(f"add_event error: {e}")
+
+    elif text == "/myid":
+        send(uid, f"Твой ID: {uid}")
+
 
 def main():
     init_db()
-    print(f"Bot started. Group ID: {GROUP_ID}")
+    log.info(f"Bot started. Group ID: {GROUP_ID}")
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:
             handle_message(event)
